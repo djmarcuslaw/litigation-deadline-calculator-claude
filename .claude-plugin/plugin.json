@@ -1,0 +1,17 @@
+{
+  "name": "litigation-deadline-calendar",
+  "version": "0.2.0",
+  "description": "Calendar litigation and arbitration deadlines from scheduling orders. Parses PDF scheduling orders, computes backward deadlines using the applicable rules (Colorado CRCP, Federal FRCP, AAA, JAMS), and generates .ics calendar files for Outlook import.",
+  "author": {
+    "name": "Dave"
+  },
+  "keywords": [
+    "litigation",
+    "deadlines",
+    "calendar",
+    "scheduling order",
+    "discovery",
+    "arbitration",
+    "legal"
+  ]
+}
