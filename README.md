@@ -31,6 +31,34 @@ The skill will always ask which jurisdiction or forum applies. It does not defau
 
 Each time the skill runs, it searches for recent rule amendments to confirm the built-in rules are still current. It then provides source URLs to the official rule texts so you can independently verify the deadlines. Sources appear both during the verification step and in the final output alongside the computed deadlines.
 
+## Installation
+
+This plugin installs directly into Claude Cowork from GitHub — no coding required.
+
+**Requirements:** Claude Desktop with Cowork access (included with Pro, Team, and Enterprise plans).
+
+**Step 1: Open Claude Desktop and switch to Cowork**
+
+Launch the Claude Desktop app and click the **Cowork** tab.
+
+**Step 2: Open the Customize menu**
+
+Click **Customize** in the left sidebar.
+
+**Step 3: Add this repository as a marketplace**
+
+Click the **+** button, then select **Add marketplace from GitHub**. Enter this repository URL:
+
+```
+https://github.com/djmarcuslaw/litigation-deadline-calculator-claude
+```
+
+**Step 4: Install the plugin**
+
+Once the marketplace loads, you'll see the **Litigation Deadline Calendar** plugin listed. Click **Install**.
+
+That's it. The plugin activates automatically — no further setup needed.
+
 ## How to Use
 
 Say something like:
