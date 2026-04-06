@@ -114,6 +114,10 @@ def generate_ics(data, output_path):
     now = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
 
     for dl in deadlines:
+        # Skip metadata/note entries — they're not calendar events
+        if dl.get("is_note"):
+            continue
+
         uid = str(uuid.uuid4())
         dl_date = datetime.strptime(dl["date"], "%Y-%m-%d").date()
 
@@ -193,7 +197,8 @@ def generate_ics(data, output_path):
     with open(output_path, "w", newline="") as f:
         f.write("\r\n".join(lines) + "\r\n")
 
-    print(f"Generated .ics file with {len(deadlines)} events: {output_path}")
+    event_count = sum(1 for dl in deadlines if not dl.get("is_note"))
+    print(f"Generated .ics file with {event_count} events: {output_path}")
     print(f"Matter: {matter}")
     if attendees:
         print(f"Attendees: {', '.join(attendees)}")
