@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.1 — 2026-04-23
+
+### Added
+- **Google Calendar compatibility mode**: `generate_ics.py --google` produces output optimized for Google Calendar import: deterministic UIDs for dedup on reimport, `X-WR-TIMEZONE` header, no VTIMEZONE blocks (Google uses its own IANA database), no VALARM entries (Google ignores them), and LF line endings to avoid mangling by intermediate tools.
+- **RFC 5545 line folding**: Long content lines are now folded at 75 octets per the iCalendar spec, with proper handling of multi-byte UTF-8 characters.
+- **Dynamic VTIMEZONE selection**: VTIMEZONE blocks are now emitted only for timezones actually referenced by timed events (supports America/Denver, America/New_York, America/Chicago, America/Los_Angeles). Previously hardcoded to America/Denver only.
+- **Deterministic UIDs** (Google mode): Event UIDs are derived from matter name + description + date via SHA-256, so reimporting the same calendar deduplicates instead of creating duplicates.
+
+### Changed
+- **Holiday caching**: `get_holidays()` results are now cached by `(year, jurisdiction)` to avoid redundant recomputation in loops, batch runs, or tests.
+
 ## 0.3.0 — 2026-04-06
 
 ### Added

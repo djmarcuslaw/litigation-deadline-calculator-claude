@@ -452,14 +452,23 @@ def get_federal_holidays(year):
     return {observe_holiday(h) for h in raw}
 
 
+# Cache: (year, jurisdiction_key) -> frozenset of holidays.
+# Avoids recomputing the same holiday set when called in loops or tests.
+_holiday_cache = {}
+
+
 def get_holidays(year, jurisdiction):
     """Get the full holiday set for a jurisdiction and year.
-    Combines federal holidays with any state-specific holidays."""
-    holidays = get_federal_holidays(year)
-    rules = get_jurisdiction_rules(jurisdiction)
-    if rules and rules.get("extra_holidays"):
-        holidays.update(rules["extra_holidays"](year))
-    return holidays
+    Combines federal holidays with any state-specific holidays.
+    Results are cached by (year, jurisdiction)."""
+    key = (year, _normalize_jurisdiction(jurisdiction) if jurisdiction else "")
+    if key not in _holiday_cache:
+        holidays = get_federal_holidays(year)
+        rules = get_jurisdiction_rules(jurisdiction)
+        if rules and rules.get("extra_holidays"):
+            holidays.update(rules["extra_holidays"](year))
+        _holiday_cache[key] = frozenset(holidays)
+    return _holiday_cache[key]
 
 
 def collect_holidays_for_dates(date_strings, jurisdiction):
