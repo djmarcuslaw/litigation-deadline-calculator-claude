@@ -5,7 +5,7 @@ description: >
   Parses a PDF scheduling order, identifies key dates, computes backward
   deadlines using the applicable rules (Colorado CRCP, Federal FRCP, or
   arbitration forum rules for AAA/JAMS), and generates an .ics calendar file
-  for Outlook import.
+  for Outlook or Google Calendar import.
 
   Use this skill whenever the user mentions: litigation deadlines, scheduling
   order, case management order, deadline calendaring, discovery deadlines,
@@ -19,7 +19,8 @@ description: >
 
 This skill takes a scheduling order (PDF upload), determines the applicable
 procedural rules, extracts key dates, computes all backward deadlines, and
-generates an .ics calendar file the user can import into Outlook.
+generates an .ics calendar file the user can import into Outlook or Google
+Calendar.
 
 ## Quick Start Workflow
 
@@ -42,22 +43,64 @@ in what you have and ask for the rest.
 - Proceeding type: **litigation** or **arbitration**
 
 **If litigation:**
-- Jurisdiction: **Always ask explicitly.** Do not assume or default to any
-  jurisdiction. The user manages cases across multiple states and needs to
-  specify each time. Examples: Colorado, Federal, California, New York, Texas, etc.
-- Service method: defaults to electronic (no extra days in Colorado, +3 in federal)
+- Jurisdiction: **Try to determine from the scheduling order first.** Look for
+  the court name, case number format, or header to identify the jurisdiction.
+  Common patterns:
+  - "District Court, ___ County, Colorado" → Colorado
+  - "United States District Court" → Federal
+  - "Superior Court of California" → California
+  - State name in the court caption → that state
+  If the scheduling order clearly identifies the jurisdiction, confirm it with
+  the user: "This appears to be a [State] case based on the court name. Can you
+  confirm?"
+  If you **cannot determine the jurisdiction from the PDF**, always ask the user
+  explicitly. **Never guess or default.** The tool will raise an error if no
+  jurisdiction is provided.
+- Service method: **electronic** (default), **mail**, **hand**, or **fax**.
+  Service method affects deadline computation differently per jurisdiction:
+  - Colorado: e-service adds 0 days, mail adds 3 days
+  - Federal: e-service adds 0 days, mail adds 3 days
+  - California: e-service adds 2 court days, mail adds 5 days (10 out-of-state)
+  - New York: e-service adds 5 days, mail adds 5 days (6 out-of-state)
+  - Florida: e-service adds 0 days, mail adds 5 days
+  - Georgia/Massachusetts/New Jersey: e-service adds 3 days, mail adds 3 days
+  - Texas/Illinois/Pennsylvania/Ohio: e-service adds 0 days, mail adds 3 days
+  For California and New York mail service, also ask whether service is
+  in-state or out-of-state (use "mail" for in-state, "mail_out_of_state" for
+  out-of-state).
 
 **If arbitration:**
 - Forum: AAA Commercial, AAA Employment, JAMS Comprehensive, or JAMS Streamlined
 
-**Optional:**
+**Optional (but check saved preferences first):**
+- Calendar application: **Outlook** (default) or **Google Calendar**. This
+  controls the .ics output format. Google Calendar mode uses deterministic
+  UIDs (so reimporting deduplicates), omits VTIMEZONE and VALARM blocks
+  (Google ignores them), and uses LF line endings.
+  **Persistence:** Before asking, check CLAUDE.md for a saved
+  `calendar_app` preference (e.g., `calendar_app: google` or
+  `calendar_app: outlook`). If found, use it silently — do not re-ask.
+  If not found, ask the user which calendar app they use and save
+  their choice to CLAUDE.md so it carries forward to future sessions.
+  Example CLAUDE.md entry: `calendar_app: google`
 - Attendee email addresses (people to invite to the calendar entries)
 - Any deadlines they already know are unusual or modified by the court
+
+**Built-in jurisdictions** (full rules database including state-specific holidays,
+service day additions, short-period computation thresholds, and discovery response
+periods): Colorado, Federal, California, New York, Texas, Florida, Illinois,
+Pennsylvania, Ohio, Georgia, New Jersey, Massachusetts.
+
+**Other jurisdictions**: The tool will use conservative federal-style defaults
+and the skill should perform a web search to verify the specific state's rules
+before computing. Always warn the user that non-built-in jurisdiction deadlines
+should be independently verified.
 
 Present this as a simple conversation, not a form. For example:
 "What's the matter name as you'd like it to appear on calendar entries?"
 "Is this litigation or arbitration?"
-"Which jurisdiction is the case in?" (never assume — always ask)
+"This looks like it's from the District Court of Denver County — is this a
+Colorado state case?"
 
 ---
 
@@ -121,19 +164,31 @@ Before computing deadlines, verify the rules and provide sources.
    - For AAA: search "AAA arbitration rules update [current year]"
    - For JAMS: search "JAMS arbitration rules update [current year]"
 
-2. For built-in jurisdictions (Colorado, Federal), compare what you find against
-   the reference files:
+2. **Verify state holidays.** The tool has built-in holiday functions for 12
+   states, but holidays can and do change (states may add, rename, or remove
+   holidays). Search for:
+   - "[State] legal holidays [current year]"
+   - "[State] court holidays [current year]"
+   - "[State] court closures [current year]"
+   Compare what you find against the holidays the script will compute. If a
+   state has added, renamed, or removed a holiday, tell the user and adjust
+   the computation. Getting a holiday wrong can silently shift deadlines by
+   a day.
+
+3. For built-in jurisdictions, compare what you find against the reference files
+   and the `STATE_RULES` dictionary in `scripts/compute_deadlines.py`:
    - Colorado: `references/colorado-crcp.md`
    - Federal: `references/federal-frcp.md`
    - Arbitration: `references/arbitration-rules.md`
+   - Other built-in states: check the `STATE_RULES` entry in the script
 
-3. If you find a discrepancy:
-   - Tell the user: "I found that [rule X] was amended on [date]. The previous
-     version said [old rule]; the current version says [new rule]. I'll use the
-     updated rule for this calculation."
-   - Use the corrected rule for computation.
+4. If you find a discrepancy (in rules OR holidays):
+   - Tell the user: "I found that [rule/holiday X] was changed on [date]. The
+     built-in version says [old]; the current version says [new]. I'll use the
+     updated version for this calculation."
+   - Use the corrected rule or holiday for computation.
 
-4. If you cannot verify (e.g., search fails):
+5. If you cannot verify (e.g., search fails):
    - Tell the user: "I wasn't able to verify whether the [jurisdiction] rules
      have been updated recently. The built-in rules are current as of early 2026.
      You may want to independently confirm the key time periods."
@@ -245,10 +300,21 @@ Review the output and sanity-check the computed dates:
 
 ## Step 5: Generate the .ics File
 
-Run the calendar generation:
+Run the calendar generation. If the user specified Google Calendar, add the
+`--google` flag:
+
 ```bash
+# Outlook / Apple Calendar (default):
 python scripts/generate_ics.py --input /tmp/computed.json --output /path/to/output/[matter_name]_deadlines.ics
+
+# Google Calendar:
+python scripts/generate_ics.py --input /tmp/computed.json --output /path/to/output/[matter_name]_deadlines.ics --google
 ```
+
+Google Calendar mode produces a file optimized for Google's import behavior:
+deterministic UIDs (reimporting updates instead of duplicating), no VTIMEZONE
+blocks (Google uses its own timezone database), no VALARM entries (Google
+ignores them and applies its own default reminders), and LF line endings.
 
 The output file should go to the user's workspace folder with a descriptive
 filename based on the matter name.
@@ -262,6 +328,8 @@ filename based on the matter name.
 **Critical deadlines** (marked with !!!) need special attention.
 
 The .ics file includes reminders at 7 days and 1 day before each deadline.
+[If Google Calendar mode:] Note: Google Calendar uses its own default
+reminders and will not import the custom reminder settings.
 [If attendees were specified:] Calendar invitations will be sent to [names]
 when you import the file.
 

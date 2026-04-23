@@ -7,6 +7,7 @@
 - **RFC 5545 line folding**: Long content lines are now folded at 75 octets per the iCalendar spec, with proper handling of multi-byte UTF-8 characters.
 - **Dynamic VTIMEZONE selection**: VTIMEZONE blocks are now emitted only for timezones actually referenced by timed events (supports America/Denver, America/New_York, America/Chicago, America/Los_Angeles). Previously hardcoded to America/Denver only.
 - **Deterministic UIDs** (Google mode): Event UIDs are derived from matter name + description + date via SHA-256, so reimporting the same calendar deduplicates instead of creating duplicates.
+- **Calendar app choice in SKILL.md**: Step 1 now asks the user which calendar app they use (Outlook or Google Calendar). Step 5 passes the `--google` flag accordingly. The preference is saved to CLAUDE.md so the user is only asked once.
 
 ### Changed
 - **Holiday caching**: `get_holidays()` results are now cached by `(year, jurisdiction)` to avoid redundant recomputation in loops, batch runs, or tests.
