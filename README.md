@@ -2,6 +2,8 @@
 
 A plugin for calendaring litigation and arbitration deadlines from scheduling orders.
 
+I calendar litigation and arbitration deadlines constantly, and doing it by hand is slow and easy to get wrong. I built this so the computation happens once, against verified current rules, with sources attached.
+
 ## What It Does
 
 Upload a scheduling order PDF, and this plugin will:
