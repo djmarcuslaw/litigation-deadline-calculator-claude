@@ -1,5 +1,38 @@
 # Changelog
 
+## Table of Contents
+
+- [0.4.2 — 2026-11-05](#042--2026-11-05)
+- [0.4.1 — 2026-11-05](#041--2026-11-05)
+- [0.4.0 — 2026-11-05](#040--2026-11-05)
+- [0.3.1 — 2026-04-23](#031--2026-04-23)
+- [0.3.0 — 2026-04-06](#030--2026-04-06)
+- [0.2.0 — 2026-02-27](#020--2026-02-27)
+- [0.1.0 — 2026-02-27](#010--2026-02-27)
+
+## 0.4.2 — 2026-11-05
+
+### Added
+- **`--dry-run`** on both scripts: validate and preview without writing a file.
+- **Safe re-runs**: the same input always produces byte-identical output; files are written atomically (temp file + rename) so failures leave no partial output.
+
+### Changed
+- **Calendar UIDs** are now deterministic in Outlook mode too (previously random), so re-importing an updated .ics updates events instead of duplicating them. `DTSTAMP` now derives from the input's `generated_date`.
+- **SKILL.md wording**: Replaced stacked ALWAYS/NEVER/mandatory phrasing with the reason behind each instruction (e.g., why jurisdiction is never guessed, why the order's dates control).
+- Added a table of contents to this changelog (reference files over 100 lines need one) and removed its self-reference to a reference-file path.
+- **SKILL.md**: Removed introductory and explanatory narration; instructions are now directive.
+- **SKILL.md**: Step 5 now gives one default command; `--google` is stated as a fallback only for Google Calendar users.
+- **Self-healing input handling**: `compute_deadlines.py` repairs common input variations (case/whitespace, state abbreviations such as `CO`, service aliases such as `e-service`, forum names with spaces) and reports each repair on stderr. Both scripts create missing output directories and accept UTF-8 BOM JSON.
+- Removed time-sensitive statements ("as of early 2026", dated rule-edition notes) from the rule references; edition dates now live in an "Old patterns: edition history" section of the arbitration reference.
+- Removed the hardcoded "current as of early 2026" statement; the rules' last-change date now points to the newest entry in this changelog.
+
+## 0.4.1 — 2026-11-05
+
+### Changed
+- **Description**: Added explicit "Do NOT use for" scope (legal advice, limitations/pre-suit and appellate deadlines, motion drafting, general task management) and tightened the trigger wording.
+- **Input validation**: `compute_deadlines.py` now validates input up front and reports all problems at once (bad dates, bad `service_method`, missing `scheduling_order_dates`, bad `proceeding_type`). Dates also accept `M/D/YYYY` and `Month D, YYYY` in addition to `YYYY-MM-DD`.
+- Unexpected errors in either script now exit 6 with a one-line message instead of a traceback.
+
 ## 0.4.0 — 2026-11-05
 
 ### Added

@@ -27,6 +27,7 @@ Output JSON: list of deadline objects with description, date, rule_basis, catego
 """
 
 import json
+import os
 import sys
 import argparse
 from datetime import date, timedelta, datetime
@@ -36,11 +37,24 @@ from datetime import date, timedelta, datetime
 # Shared date helpers
 # ---------------------------------------------------------------------------
 
+_DATE_FORMATS = ("%Y-%m-%d", "%m/%d/%Y", "%B %d, %Y", "%b %d, %Y", "%B %d %Y")
+
+
 def parse_date(s):
-    """Parse a YYYY-MM-DD string into a date object. Returns None if falsy."""
-    if s:
-        return datetime.strptime(s, "%Y-%m-%d").date()
-    return None
+    """Parse a date string into a date object. Returns None if falsy.
+    Accepts YYYY-MM-DD (preferred) and common US formats such as 9/15/2027 or
+    September 15, 2027. Raises ValueError naming the value if none match."""
+    if not s:
+        return None
+    if isinstance(s, date):
+        return s
+    text = str(s).strip()
+    for fmt in _DATE_FORMATS:
+        try:
+            return datetime.strptime(text, fmt).date()
+        except ValueError:
+            continue
+    raise ValueError(f"unrecognized date '{s}' (use YYYY-MM-DD)")
 
 
 def observe_holiday(d):
@@ -477,8 +491,8 @@ def collect_holidays_for_dates(date_strings, jurisdiction):
     years = {date.today().year, date.today().year + 1}
     for d in date_strings:
         try:
-            years.add(datetime.strptime(d, "%Y-%m-%d").year)
-        except (ValueError, TypeError):
+            years.add(parse_date(d).year)
+        except (ValueError, TypeError, AttributeError):
             pass
     holidays = set()
     for y in years:
@@ -855,11 +869,108 @@ def generate_arbitration_deadlines(data):
 # Main
 # ---------------------------------------------------------------------------
 
+_JURISDICTION_ALIASES = {
+    "co": "colorado", "colo": "colorado", "colorado_state": "colorado",
+    "fed": "federal", "us": "federal", "usdc": "federal", "federal_court": "federal",
+    "ca": "california", "cal": "california",
+    "ny": "new_york", "n.y.": "new_york", "newyork": "new_york",
+    "tx": "texas", "fl": "florida", "il": "illinois", "pa": "pennsylvania",
+    "oh": "ohio", "ga": "georgia", "nj": "new_jersey", "ma": "massachusetts",
+}
+_SERVICE_ALIASES = {
+    "e-service": "electronic", "eservice": "electronic", "e_service": "electronic",
+    "email": "electronic", "e-mail": "electronic", "efile": "electronic",
+    "e-file": "electronic", "efiling": "electronic",
+    "us_mail": "mail", "usps": "mail", "first_class": "mail", "postal": "mail",
+    "mail_out_of_state": "mail_out_of_state", "mail_out-of-state": "mail_out_of_state",
+    "hand_delivery": "hand", "personal": "hand", "personal_service": "hand",
+    "facsimile": "fax",
+}
+
+
+def _clean_key(value):
+    return str(value).strip().lower().replace(" ", "_")
+
+
+def normalize_input(data):
+    """Repair common input variations in place and return a list of notes
+    describing each repair (printed to stderr). Anything that cannot be
+    repaired safely is left for validate_input to report."""
+    notes = []
+    if not isinstance(data, dict):
+        return notes
+
+    def fix(key, new):
+        old = data.get(key)
+        if old != new:
+            notes.append(f"normalized {key}: {old!r} -> {new!r}")
+            data[key] = new
+
+    if isinstance(data.get("matter_name"), str):
+        data["matter_name"] = data["matter_name"].strip()
+    if isinstance(data.get("proceeding_type"), str):
+        fix("proceeding_type", _clean_key(data["proceeding_type"]))
+    if isinstance(data.get("jurisdiction"), str) and data["jurisdiction"].strip():
+        key = _clean_key(data["jurisdiction"]).replace("-", "_")
+        fix("jurisdiction", _JURISDICTION_ALIASES.get(key, key))
+    if isinstance(data.get("service_method"), str):
+        key = _clean_key(data["service_method"])
+        fix("service_method", _SERVICE_ALIASES.get(key, key))
+    if isinstance(data.get("forum"), str) and data["forum"].strip():
+        fix("forum", _clean_key(data["forum"]).replace("-", "_"))
+    if not isinstance(data.get("attendees", []), list):
+        notes.append("attendees was not a list; ignored")
+        data["attendees"] = []
+    return notes
+
+
+_VALID_SERVICE_METHODS = {"electronic", "mail", "mail_out_of_state", "hand", "fax"}
+
+
+def validate_input(data):
+    """Check the input up front and return a list of problems (empty if OK).
+    Reports every problem at once so the caller can fix them in one pass."""
+    problems = []
+    if not isinstance(data, dict):
+        return ["input must be a JSON object"]
+    if not data.get("matter_name"):
+        problems.append("missing 'matter_name'")
+    ptype = data.get("proceeding_type", "litigation")
+    if ptype not in ("litigation", "arbitration"):
+        problems.append(f"proceeding_type '{ptype}' must be 'litigation' or 'arbitration'")
+    svc = str(data.get("service_method", "electronic")).lower()
+    if svc not in _VALID_SERVICE_METHODS:
+        problems.append(
+            f"service_method '{svc}' must be one of: {', '.join(sorted(_VALID_SERVICE_METHODS))}")
+    dates = data.get("scheduling_order_dates")
+    if not isinstance(dates, dict):
+        problems.append("missing 'scheduling_order_dates' object")
+        return problems
+    for field, value in dates.items():
+        if field == "custom_dates":
+            if value is not None and not isinstance(value, dict):
+                problems.append("'custom_dates' must be an object of label: date")
+                continue
+            for label, v in (value or {}).items():
+                try:
+                    parse_date(v)
+                except ValueError as e:
+                    problems.append(f"custom_dates['{label}']: {e}")
+        elif value is not None:
+            try:
+                parse_date(value)
+            except ValueError as e:
+                problems.append(f"{field}: {e}")
+    return problems
+
+
 EXIT_OK = 0
 EXIT_USAGE = 2          # bad command-line arguments (argparse default)
 EXIT_INPUT_UNREADABLE = 3   # input file missing, unreadable, or not valid JSON
 EXIT_INPUT_INVALID = 4      # input parsed but content is invalid (e.g., no jurisdiction)
 EXIT_OUTPUT_FAILED = 5      # could not write the output file
+
+EXIT_INTERNAL = 6           # unexpected error (message on stderr)
 
 MAX_SUMMARY_ITEMS = 50      # cap on deadlines echoed on stdout; full list is in --output
 
@@ -875,21 +986,27 @@ def main():
                     "to --output; prints a bounded JSON summary on stdout; "
                     "diagnostics go to stderr.",
         epilog="Exit codes: 0 ok; 2 usage; 3 input unreadable/invalid JSON; "
-               "4 invalid input content; 5 output write failed.")
+               "4 invalid input content; 5 output write failed; 6 unexpected error")
     parser.add_argument("--input", required=True, help="Path to input JSON file")
     parser.add_argument("--output", required=True, help="Path to output JSON file")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Validate and compute, but do not write --output")
     args = parser.parse_args()
 
     try:
-        with open(args.input, "r") as f:
+        with open(args.input, "r", encoding="utf-8-sig") as f:
             data = json.load(f)
     except OSError as e:
         _fail(EXIT_INPUT_UNREADABLE, f"cannot read input file {args.input}: {e.strerror}")
     except json.JSONDecodeError as e:
         _fail(EXIT_INPUT_UNREADABLE, f"input is not valid JSON ({e})")
 
-    if not isinstance(data, dict) or not data.get("matter_name"):
-        _fail(EXIT_INPUT_INVALID, "input must be a JSON object with a 'matter_name'")
+    for note in normalize_input(data):
+        print(f"note: {note}", file=sys.stderr)
+
+    problems = validate_input(data)
+    if problems:
+        _fail(EXIT_INPUT_INVALID, "invalid input:\n  - " + "\n  - ".join(problems))
 
     proceeding_type = data.get("proceeding_type", "litigation")
 
@@ -900,6 +1017,8 @@ def main():
             deadlines = generate_litigation_deadlines(data)
     except (ValueError, KeyError, TypeError) as e:
         _fail(EXIT_INPUT_INVALID, f"could not compute deadlines: {e}")
+    except Exception as e:  # unexpected: report cleanly instead of a traceback
+        _fail(EXIT_INTERNAL, f"unexpected failure ({type(e).__name__}: {e})")
 
     result = {
         "matter_name": data["matter_name"],
@@ -913,17 +1032,26 @@ def main():
         "disclaimer": ""
     }
 
-    try:
-        with open(args.output, "w") as f:
-            json.dump(result, f, indent=2)
-    except OSError as e:
-        _fail(EXIT_OUTPUT_FAILED, f"cannot write output file {args.output}: {e.strerror}")
+    if not args.dry_run:
+        try:
+            # Temp file + rename so a failure never leaves a partial output.
+            out_dir = os.path.dirname(os.path.abspath(args.output))
+            os.makedirs(out_dir, exist_ok=True)
+            tmp_path = args.output + ".tmp"
+            with open(tmp_path, "w") as f:
+                json.dump(result, f, indent=2)
+            os.replace(tmp_path, args.output)
+        except OSError as e:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+            _fail(EXIT_OUTPUT_FAILED, f"cannot write output file {args.output}: {e.strerror}")
 
     events = [d for d in deadlines if not d.get("is_note")]
     summary = {
         "status": "ok",
         "matter_name": data["matter_name"],
-        "output": args.output,
+        "output": None if args.dry_run else args.output,
+        "dry_run": args.dry_run,
         "deadline_count": len(events),
         "deadlines": [
             {"date": d["date"], "description": d["description"], "priority": d["priority"]}
@@ -933,7 +1061,10 @@ def main():
     }
     # Human-readable view on stderr (diagnostics channel), bounded like the JSON.
     print(f"Computed {len(events)} deadlines for '{data['matter_name']}'", file=sys.stderr)
-    print(f"Output written to: {args.output}", file=sys.stderr)
+    if args.dry_run:
+        print("Dry run: no file written", file=sys.stderr)
+    else:
+        print(f"Output written to: {args.output}", file=sys.stderr)
     for dl in events[:MAX_SUMMARY_ITEMS]:
         marker = "!!!" if dl["priority"] == "critical" else "! " if dl["priority"] == "high" else "  "
         print(f"  {marker} {dl['date']}  {dl['description']}", file=sys.stderr)

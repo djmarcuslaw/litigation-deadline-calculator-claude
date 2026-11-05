@@ -2,7 +2,7 @@
 
 This reference contains the key FRCP rules relevant to computing litigation deadlines in federal court. Use this when the user specifies a federal jurisdiction.
 
-**Important**: These rules reflect federal law as of early 2026. The skill's verification step should confirm these remain current.
+**Important**: Rules change. The skill's verification step must confirm these still match the current FRCP.
 
 ---
 
@@ -117,4 +117,4 @@ For deadline computation under FRCP Rule 6(a):
 - Fourth Thursday in November — Thanksgiving Day
 - December 25 — Christmas Day
 
-Note: When a holiday falls on Saturday, it is observed on Friday. When it falls on Sunday, it is observed on Monday. Juneteenth was added as a federal holiday in 2021.
+Note: When a holiday falls on Saturday, it is observed on Friday. When it falls on Sunday, it is observed on Monday.

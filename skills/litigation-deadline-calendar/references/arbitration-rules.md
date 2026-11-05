@@ -4,10 +4,7 @@ This reference covers the AAA Commercial Arbitration Rules and JAMS Comprehensiv
 
 **Critical distinction from litigation**: Arbitration deadlines are driven by the applicable arbitration rules and the arbitrator's scheduling order, NOT by the rules of civil procedure. Never apply CRCP or FRCP time-computation rules to arbitration deadlines unless the arbitrator's order explicitly incorporates them.
 
-**Rule versions**:
-- AAA Commercial Arbitration Rules: Effective September 1, 2022
-- AAA Employment Arbitration Rules: Updated May 1, 2025
-- JAMS Comprehensive Arbitration Rules: Revised June 1, 2021
+**Rule editions**: see "Old patterns: edition history" at the end of this file. Verify the forum's current edition before relying on these figures.
 
 ---
 
@@ -18,6 +15,7 @@ This reference covers the AAA Commercial Arbitration Rules and JAMS Comprehensiv
 3. [JAMS Comprehensive Arbitration Rules](#jams-comprehensive)
 4. [JAMS Streamlined Arbitration Rules](#jams-streamlined)
 5. [Key Differences from Litigation](#differences)
+6. [Old patterns: edition history](#edition-history)
 
 ---
 
@@ -61,9 +59,9 @@ This reference covers the AAA Commercial Arbitration Rules and JAMS Comprehensiv
 - **Answering Statement**: Due within **14 days** after notice of filing.
 - **Discovery**: More permissive than commercial; arbitrator may allow depositions and document requests.
 - **Award**: Within **30 days** after close of hearing.
-- **Stay for judicial intervention**: **90 days** (updated 2025).
+- **Stay for judicial intervention**: **90 days**.
 
-### 2025 Updates (Effective May 1, 2025)
+### Recent Amendments (see edition history)
 - Default use of virtual hearings.
 - Expanded arbitrator authority for subpoenas, depositions, and sanctions.
 - Arbitrators may modify or clarify awards on their own initiative.
@@ -143,3 +141,14 @@ When processing an arbitration scheduling order:
 3. **Do apply the forum's rules** (AAA or JAMS) for any procedural deadlines not covered by the scheduling order (e.g., the arbitrator's award deadline after hearing).
 4. **Do flag** if the scheduling order appears to conflict with the forum's rules.
 5. The arbitrator's scheduling order is the primary authority; the forum rules fill gaps.
+
+---
+
+## Old patterns: edition history {#edition-history}
+
+Editions this file was written against. These go stale; treat them as a
+starting point for the verification step, not as current facts.
+
+- AAA Commercial Arbitration Rules: effective September 1, 2022
+- AAA Employment Arbitration Rules: updated May 1, 2025 (the amendments listed above, and the stay for judicial intervention)
+- JAMS Comprehensive Arbitration Rules: revised June 1, 2021

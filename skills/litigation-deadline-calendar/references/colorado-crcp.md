@@ -2,7 +2,7 @@
 
 This reference contains the key CRCP rules relevant to computing litigation deadlines in Colorado state court. The skill should use this as its primary reference when the user specifies Colorado as the jurisdiction.
 
-**Important**: These rules reflect the state of Colorado law as of early 2026. The skill's verification step should confirm these remain current by searching for recent rule changes before relying on them.
+**Important**: Rules change. The skill's verification step must confirm these still match the current CRCP by searching for rule changes before relying on them.
 
 ---
 

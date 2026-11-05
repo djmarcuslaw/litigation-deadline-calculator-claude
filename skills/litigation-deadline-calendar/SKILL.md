@@ -7,20 +7,19 @@ description: >
   arbitration forum rules for AAA/JAMS), and generates an .ics calendar file
   for Outlook or Google Calendar import.
 
-  Use this skill whenever the user mentions: litigation deadlines, scheduling
-  order, case management order, deadline calendaring, discovery deadlines,
-  trial preparation deadlines, arbitration scheduling, or anything related
-  to computing or tracking court or arbitration deadlines. Also trigger when
-  the user uploads a PDF that appears to be a court scheduling order or
-  arbitration scheduling order.
+  Use whenever the user mentions litigation deadlines, scheduling order, case
+  management order, deadline calendaring, discovery or trial preparation
+  deadlines, arbitration scheduling, or uploads a court or arbitration
+  scheduling order PDF.
+
+  Do NOT use for: legal advice on which deadlines apply or whether to seek an
+  extension, statute-of-limitations or pre-suit deadlines, appellate deadlines,
+  drafting or filing motions, or general calendar or task management. It
+  calendars dates from an existing order and does not replace attorney
+  verification.
 ---
 
 # Litigation Deadline Calendar
-
-This skill takes a scheduling order (PDF upload), determines the applicable
-procedural rules, extracts key dates, computes all backward deadlines, and
-generates an .ics calendar file the user can import into Outlook or Google
-Calendar.
 
 ## Quick Start Workflow
 
@@ -34,8 +33,7 @@ Calendar.
 
 ## Step 1: Gather Information
 
-Ask the user for the following. They may provide some of this upfront; fill
-in what you have and ask for the rest.
+Collect the following. Use what the user already provided and ask only for the rest.
 
 **Required:**
 - The scheduling order PDF (uploaded file)
@@ -53,9 +51,10 @@ in what you have and ask for the rest.
   If the scheduling order clearly identifies the jurisdiction, confirm it with
   the user: "This appears to be a [State] case based on the court name. Can you
   confirm?"
-  If you **cannot determine the jurisdiction from the PDF**, always ask the user
-  explicitly. **Never guess or default.** The tool will raise an error if no
-  jurisdiction is provided.
+  If you cannot determine the jurisdiction from the PDF, ask the user
+  explicitly. A wrong guess silently applies the wrong holiday calendar, service
+  days and response periods to every deadline, so the tool refuses to run
+  without a jurisdiction.
 - Service method: **electronic** (default), **mail**, **hand**, or **fax**.
   Service method affects deadline computation differently per jurisdiction:
   - Colorado: e-service adds 0 days, mail adds 3 days
@@ -73,10 +72,8 @@ in what you have and ask for the rest.
 - Forum: AAA Commercial, AAA Employment, JAMS Comprehensive, or JAMS Streamlined
 
 **Optional (but check saved preferences first):**
-- Calendar application: **Outlook** (default) or **Google Calendar**. This
-  controls the .ics output format. Google Calendar mode uses deterministic
-  UIDs (so reimporting deduplicates), omits VTIMEZONE and VALARM blocks
-  (Google ignores them), and uses LF line endings.
+- Calendar application: Outlook (default); Google Calendar only if the user
+  says so. This controls the .ics output format.
   **Persistence:** Before asking, check CLAUDE.md for a saved
   `calendar_app` preference (e.g., `calendar_app: google` or
   `calendar_app: outlook`). If found, use it silently — do not re-ask.
@@ -93,10 +90,11 @@ Pennsylvania, Ohio, Georgia, New Jersey, Massachusetts.
 
 **Other jurisdictions**: The tool will use conservative federal-style defaults
 and the skill should perform a web search to verify the specific state's rules
-before computing. Always warn the user that non-built-in jurisdiction deadlines
-should be independently verified.
+before computing. Warn the user that non-built-in jurisdiction deadlines should
+be independently verified, because the fallback defaults may not match that
+state's local practice.
 
-Present this as a simple conversation, not a form. For example:
+Ask one or two questions at a time, conversationally. Examples:
 "What's the matter name as you'd like it to appear on calendar entries?"
 "Is this litigation or arbitration?"
 "This looks like it's from the District Court of Denver County — is this a
@@ -138,21 +136,21 @@ After parsing, **show the user what you found** and ask them to confirm before
 proceeding. Format it as a clean list:
 
 "Here's what I extracted from the scheduling order:
-- Trial Date: September 15, 2026
-- Discovery Cutoff: July 28, 2026
-- Dispositive Motion Deadline: June 15, 2026
+- Trial Date: [Month D, YYYY]
+- Discovery Cutoff: [Month D, YYYY]
+- Dispositive Motion Deadline: [Month D, YYYY]
 [etc.]
 
 Does this look right? Anything I missed or got wrong?"
 
-This confirmation step is important because PDF parsing can miss dates or
-misinterpret them, and an error here cascades through every computed deadline.
+Wait for confirmation before continuing; a misread date cascades through every
+computed deadline.
 
 ---
 
 ## Step 3: Verify Rules Are Current
 
-Before computing deadlines, verify the rules and provide sources.
+Verify the rules and collect sources before computing.
 
 **Verification procedure:**
 1. Search the web for the current text of the applicable rules AND any recent
@@ -190,8 +188,9 @@ Before computing deadlines, verify the rules and provide sources.
 
 5. If you cannot verify (e.g., search fails):
    - Tell the user: "I wasn't able to verify whether the [jurisdiction] rules
-     have been updated recently. The built-in rules are current as of early 2026.
-     You may want to independently confirm the key time periods."
+     have been updated recently. The built-in rules were last changed on the date of
+     the newest entry in `references/CHANGELOG.md`. You may want to independently
+     confirm the key time periods."
 
 **For non-built-in jurisdictions** (any state other than Colorado):
 Search for the specific state's rules of civil procedure, focusing on:
@@ -203,11 +202,9 @@ Search for the specific state's rules of civil procedure, focusing on:
 
 Present what you find to the user for confirmation before computing.
 
-**Source citation requirement — this is mandatory:**
-After verifying the rules, always provide the user with a "Sources" section
-listing the specific URLs where they can independently check the rules being
-applied. This is critical because the user manages outside counsel and needs
-to be able to verify the rules independently. Format:
+**Source citations:**
+After verifying, give the user a "Sources" section listing the URLs for the rules
+applied, so they can check them independently. Format:
 
 "**Sources for [Jurisdiction] rules used in this calculation:**
 - [Rule description]: [URL to official source or authoritative reference]
@@ -220,8 +217,7 @@ Preferred official sources by jurisdiction:
 - JAMS: jamsadr.com
 - Other states: the state judiciary's official website
 
-If you cannot find an official source for a rule, say so explicitly rather
-than omitting the citation.
+If no official source exists for a rule, say so explicitly.
 
 ---
 
@@ -257,18 +253,15 @@ Create the input JSON file for the computation script. The format is:
 }
 ```
 
-Use `null` for any dates not present in the scheduling order. The script will
-compute them from the rules where applicable (e.g., expert deadlines computed
-backward from trial date).
-
-Add any dates from the scheduling order that don't fit standard fields into
-`custom_dates` with a descriptive label.
+Use `null` for dates not in the scheduling order; the script computes them from
+the rules where applicable (e.g., expert deadlines backward from trial date).
+Put dates that don't fit a standard field into `custom_dates` with a descriptive
+label.
 
 ### Optional Fields on Any Deadline Entry
 
-The computed deadlines JSON (output of `compute_deadlines.py`) supports three
-optional fields on individual deadline entries that control how they appear
-in the .ics calendar:
+Add these optional fields to entries in the computed JSON (output of
+`compute_deadlines.py`) to control how they appear in the .ics:
 
 - **`time`** (string, HH:MM in 24-hour format): Makes the event a timed event
   instead of all-day. Example: `"time": "08:30"`. If no explicit end time is
@@ -282,8 +275,7 @@ in the .ics calendar:
   ends at 17:00 on the last day. If used without `time`, it creates a multi-day
   all-day event.
 
-These fields are useful for events like multi-day trials or hearings, or when
-the scheduling order specifies a particular time for a conference or deadline.
+Use them for multi-day trials or hearings, or when the order specifies a time.
 
 Run the computation:
 ```bash
@@ -301,11 +293,18 @@ deadlines; the full list is in the output file) and errors on stderr.
 | 3 | Input file missing, unreadable, or not valid JSON |
 | 4 | Input content invalid (e.g., missing matter name or jurisdiction) |
 | 5 | Could not write the output file |
+| 6 | Unexpected error (message on stderr) |
 
-If a script exits non-zero, read stderr, fix the input, and re-run. Do not
-guess missing values (especially jurisdiction): ask the user.
+If a script exits non-zero, read stderr, fix the input, and re-run. Ask the user
+for missing values (especially jurisdiction) rather than guessing them.
 
-Review the output and sanity-check the computed dates:
+Both scripts are safe to run again: the same input always produces the same
+output, files are written atomically (no partial results on failure), and
+calendar event IDs are stable, so re-importing an updated .ics updates events
+instead of duplicating them. Pass `--dry-run` to validate and preview the
+summary without writing any file.
+
+Check the computed dates:
 - Do all dates fall on business days?
 - Are the backward-computed dates BEFORE their anchor deadlines?
 - Do expert disclosure deadlines fall in a reasonable sequence?
@@ -315,24 +314,17 @@ Review the output and sanity-check the computed dates:
 
 ## Step 5: Generate the .ics File
 
-Run the calendar generation. If the user specified Google Calendar, add the
-`--google` flag:
+Run the calendar generation:
 
 ```bash
-# Outlook / Apple Calendar (default):
 python scripts/generate_ics.py --input work/computed.json --output work/[matter_name]_deadlines.ics
-
-# Google Calendar:
-python scripts/generate_ics.py --input work/computed.json --output work/[matter_name]_deadlines.ics --google
 ```
 
-Google Calendar mode produces a file optimized for Google's import behavior:
-deterministic UIDs (reimporting updates instead of duplicating), no VTIMEZONE
-blocks (Google uses its own timezone database), no VALARM entries (Google
-ignores them and applies its own default reminders), and LF line endings.
+Fallback, only when the saved or stated calendar app is Google Calendar: add
+`--google`. It omits VTIMEZONE and VALARM blocks (Google ignores them) and uses
+LF line endings.
 
-The output file should go to the user's workspace folder with a descriptive
-filename based on the matter name.
+Name the file after the matter and save it in the user's workspace folder.
 
 **Before delivering the file, show the user a summary:**
 
@@ -355,9 +347,7 @@ regarding local rules and any subsequent orders that may modify deadlines.
 **Sources for the rules applied:**
 [List each source URL used — same sources provided in Step 3]"
 
-Then provide the .ics file link. The sources should always appear in the final
-output so the user has them right alongside the deadlines, not just earlier in
-the conversation where they might scroll past them.
+Then provide the .ics file link, with the sources repeated alongside the deadlines.
 
 ---
 
@@ -376,7 +366,18 @@ Read these reference files for the detailed rules used in computation:
 - **Arbitration rules**: `references/arbitration-rules.md`
   - Read when proceeding type is arbitration
   - Covers AAA Commercial, AAA Employment, JAMS Comprehensive, JAMS Streamlined
-  - Critical: Do NOT apply litigation time-computation rules to arbitration
+  - Arbitration deadlines follow forum rules, so litigation time-computation rules would give wrong dates
+
+- **Project docs**: `references/README.md` and `references/CHANGELOG.md`
+  - Read only when asked about the skill's purpose, version, or change history
+  - Not needed for computing deadlines
+
+## Scripts
+
+- `scripts/compute_deadlines.py`: computes all deadlines from the input JSON (Step 4)
+- `scripts/generate_ics.py`: turns the computed JSON into an .ics calendar file (Step 5)
+
+This skill has no `assets/` directory.
 
 ---
 
@@ -391,8 +392,8 @@ Examples:
 - Smith v. Jones Co. — Plaintiff Expert Disclosure Deadline
 - Smith v. Jones Co. — Arbitration Hearing
 
-The matter name always comes first so that entries from different cases are
-visually distinguishable in a crowded calendar.
+Put the matter name first so that entries from different cases are visually
+distinguishable in a crowded calendar.
 
 ---
 
@@ -400,12 +401,13 @@ visually distinguishable in a crowded calendar.
 
 **Scheduling order supersedes default rules:**
 If the scheduling order sets a deadline that differs from what the rules would
-produce (e.g., a shorter discovery period), always use the scheduling order date.
-Only use rule-based computation for deadlines NOT specified in the order.
+produce (e.g., a shorter discovery period), use the scheduling order date: the
+court's order controls over default rules. Use rule-based computation only for
+deadlines the order does not specify.
 
 **Arbitration is not litigation:**
-If the user says "arbitration," never apply CRCP or FRCP time-computation rules.
-Arbitration deadlines come from the arbitrator's order and the forum rules. If
+If the user says "arbitration," don't apply CRCP or FRCP time-computation rules:
+arbitration deadlines come from the arbitrator's order and the forum rules. If
 the arbitrator's order incorporates any litigation rules by reference, note that
 to the user but still apply them as the arbitrator specified.
 

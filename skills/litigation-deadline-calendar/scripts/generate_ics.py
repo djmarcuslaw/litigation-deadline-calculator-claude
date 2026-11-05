@@ -33,10 +33,10 @@ Supported deadline fields:
 """
 
 import json
+import os
 import sys
 import argparse
 import hashlib
-import uuid
 from datetime import date, datetime, timedelta
 
 
@@ -201,7 +201,7 @@ END:VTIMEZONE""",
 # ICS generation
 # ---------------------------------------------------------------------------
 
-def generate_ics(data, output_path, google_mode=False):
+def generate_ics(data, output_path, google_mode=False, dry_run=False):
     """Generate an .ics file from computed deadlines data.
 
     Args:
@@ -244,18 +244,18 @@ def generate_ics(data, output_path, google_mode=False):
                 for tz_line in block.strip().split("\n"):
                     lines.append(tz_line)
 
-    now = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    # DTSTAMP comes from the input's generated_date so re-running on the same
+    # input produces a byte-identical file (safe to run again).
+    stamp_date = str(data.get("generated_date") or datetime.utcnow().strftime("%Y-%m-%d"))
+    now = stamp_date.replace("-", "") + "T000000Z"
 
     for dl in deadlines:
         if dl.get("is_note"):
             continue
 
-        # Deterministic UIDs let Google Calendar deduplicate on reimport.
-        # Random UUIDs are better for Outlook (avoids accidental overwrites).
-        if google_mode:
-            uid = deterministic_uid(matter, dl["description"], dl["date"])
-        else:
-            uid = str(uuid.uuid4())
+        # Deterministic UIDs (all modes) mean re-running and re-importing
+        # updates existing events instead of creating duplicates.
+        uid = deterministic_uid(matter, dl["description"], dl["date"])
 
         dl_date = datetime.strptime(dl["date"], "%Y-%m-%d").date()
 
@@ -334,19 +334,34 @@ def generate_ics(data, output_path, google_mode=False):
     # user and Google (email clients, cloud storage previews) can mangle
     # CRLF. LF-only is safer for that path. Outlook requires CRLF per spec.
     line_ending = "\n" if google_mode else "\r\n"
-    with open(output_path, "w", newline="") as f:
-        f.write(line_ending.join(folded) + line_ending)
+    if not dry_run:
+        # Write to a temp file then rename, so a failure never leaves a
+        # half-written calendar behind.
+        os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+        tmp_path = output_path + ".tmp"
+        try:
+            with open(tmp_path, "w", newline="") as f:
+                f.write(line_ending.join(folded) + line_ending)
+            os.replace(tmp_path, output_path)
+        except OSError:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+            raise
 
     event_count = sum(1 for dl in deadlines if not dl.get("is_note"))
     mode_label = " (Google Calendar mode)" if google_mode else ""
-    print(f"Generated .ics file with {event_count} events{mode_label}: {output_path}", file=sys.stderr)
+    if dry_run:
+        print(f"Dry run: would generate {event_count} events{mode_label}; no file written", file=sys.stderr)
+    else:
+        print(f"Generated .ics file with {event_count} events{mode_label}: {output_path}", file=sys.stderr)
     print(f"Matter: {matter}", file=sys.stderr)
     if attendees:
         print(f"Attendees: {', '.join(attendees)}", file=sys.stderr)
     print("To use: Import this file into Outlook, Google Calendar, or Apple Calendar.", file=sys.stderr)
     print(json.dumps({
         "status": "ok",
-        "output": output_path,
+        "output": None if dry_run else output_path,
+        "dry_run": dry_run,
         "event_count": event_count,
         "matter": matter,
         "google_mode": google_mode,
@@ -359,6 +374,7 @@ EXIT_USAGE = 2          # bad command-line arguments (argparse default)
 EXIT_INPUT_UNREADABLE = 3   # input file missing, unreadable, or not valid JSON
 EXIT_INPUT_INVALID = 4      # input is not computed-deadlines JSON
 EXIT_OUTPUT_FAILED = 5      # could not write the .ics file
+EXIT_INTERNAL = 6           # unexpected error (message on stderr)
 
 
 def _fail(code, message):
@@ -371,17 +387,19 @@ def main():
         description="Generate .ics calendar file from computed deadlines. "
                     "Prints a small JSON summary on stdout; diagnostics go to stderr.",
         epilog="Exit codes: 0 ok; 2 usage; 3 input unreadable/invalid JSON; "
-               "4 invalid input content; 5 output write failed.")
+               "4 invalid input content; 5 output write failed; 6 unexpected error")
     parser.add_argument("--input", required=True,
                         help="Path to computed deadlines JSON file")
     parser.add_argument("--output", required=True,
                         help="Path for output .ics file")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Validate and report, but do not write --output")
     parser.add_argument("--google", action="store_true",
                         help="Optimize output for Google Calendar compatibility")
     args = parser.parse_args()
 
     try:
-        with open(args.input, "r") as f:
+        with open(args.input, "r", encoding="utf-8-sig") as f:
             data = json.load(f)
     except OSError as e:
         _fail(EXIT_INPUT_UNREADABLE, f"cannot read input file {args.input}: {e.strerror}")
@@ -393,11 +411,13 @@ def main():
               "input must be the JSON written by compute_deadlines.py (missing 'deadlines' list)")
 
     try:
-        generate_ics(data, args.output, google_mode=args.google)
+        generate_ics(data, args.output, google_mode=args.google, dry_run=args.dry_run)
     except OSError as e:
         _fail(EXIT_OUTPUT_FAILED, f"cannot write output file {args.output}: {e.strerror}")
     except (KeyError, TypeError, ValueError) as e:
         _fail(EXIT_INPUT_INVALID, f"malformed deadline data: {e}")
+    except Exception as e:  # unexpected: report cleanly instead of a traceback
+        _fail(EXIT_INTERNAL, f"unexpected failure ({type(e).__name__}: {e})")
 
 
 if __name__ == "__main__":
