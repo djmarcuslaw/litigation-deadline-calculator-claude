@@ -287,8 +287,23 @@ the scheduling order specifies a particular time for a conference or deadline.
 
 Run the computation:
 ```bash
-python scripts/compute_deadlines.py --input /tmp/input.json --output /tmp/computed.json
+python scripts/compute_deadlines.py --input work/input.json --output work/computed.json
 ```
+
+Write `work/input.json` in a `work/` folder in the current directory (create it
+first). The script prints a readable deadline list on stderr and a short JSON summary on stdout (capped at 50
+deadlines; the full list is in the output file) and errors on stderr.
+
+| Exit code | Meaning |
+|---|---|
+| 0 | Success |
+| 2 | Bad command-line arguments |
+| 3 | Input file missing, unreadable, or not valid JSON |
+| 4 | Input content invalid (e.g., missing matter name or jurisdiction) |
+| 5 | Could not write the output file |
+
+If a script exits non-zero, read stderr, fix the input, and re-run. Do not
+guess missing values (especially jurisdiction): ask the user.
 
 Review the output and sanity-check the computed dates:
 - Do all dates fall on business days?
@@ -305,10 +320,10 @@ Run the calendar generation. If the user specified Google Calendar, add the
 
 ```bash
 # Outlook / Apple Calendar (default):
-python scripts/generate_ics.py --input /tmp/computed.json --output /path/to/output/[matter_name]_deadlines.ics
+python scripts/generate_ics.py --input work/computed.json --output work/[matter_name]_deadlines.ics
 
 # Google Calendar:
-python scripts/generate_ics.py --input /tmp/computed.json --output /path/to/output/[matter_name]_deadlines.ics --google
+python scripts/generate_ics.py --input work/computed.json --output work/[matter_name]_deadlines.ics --google
 ```
 
 Google Calendar mode produces a file optimized for Google's import behavior:

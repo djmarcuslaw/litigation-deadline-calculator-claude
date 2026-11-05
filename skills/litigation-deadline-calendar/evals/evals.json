@@ -1,0 +1,64 @@
+{
+  "skill_name": "litigation-deadline-calendar",
+  "evals": [
+    {
+      "id": 1,
+      "name": "colorado-state-court-order",
+      "prompt": "I have a scheduling order in Acme Holdings v. Widget Partners, District Court, Denver County, Colorado. Dates from the order: trial September 15, 2027; discovery cutoff July 28, 2027; dispositive motion deadline June 15, 2027; pretrial conference August 15, 2027; mediation deadline May 3, 2027. The order does not set expert disclosure dates. Service is electronic. Please calendar these for Outlook. My email is test@example.com.",
+      "expected_output": "An .ics file with the stated order dates plus backward-computed deadlines (including expert disclosures) under the Colorado Rules of Civil Procedure, with rule sources cited.",
+      "files": [],
+      "expectations": [
+        "Identifies the jurisdiction as Colorado and uses CRCP, not FRCP or arbitration rules",
+        "Shows the extracted dates to the user and asks for confirmation before computing",
+        "Cites source URLs for the rules used (e.g., coloradojudicial.gov)",
+        "Writes an input JSON using the documented schema with null for the missing expert dates and runs scripts/compute_deadlines.py",
+        "Computed expert disclosure deadlines fall before the discovery cutoff and after earlier milestones",
+        "No computed deadline falls on a weekend or a Colorado legal holiday",
+        "Generates an .ics file using the default (Outlook) mode, without the --google flag, and includes test@example.com as an attendee"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "federal-court-order-google-calendar",
+      "prompt": "Scheduling order from the United States District Court for the District of Colorado, Northwind Corp. v. Example Supply Co. Trial: November 8, 2027 (5-day jury trial). Discovery cutoff: August 20, 2027. Dispositive motions: July 9, 2027. Final pretrial conference: October 12, 2027. Amend pleadings: March 1, 2027. Service by mail. I use Google Calendar.",
+      "expected_output": "An .ics file in Google Calendar mode with federal-rule computations including the 3-day mail-service addition where applicable.",
+      "files": [],
+      "expectations": [
+        "Identifies the jurisdiction as Federal and uses FRCP, not Colorado state rules",
+        "Records service_method as mail in the input JSON and reflects the 3-day addition under Rule 6(d)",
+        "Cites sources for the federal rules (e.g., law.cornell.edu or uscourts.gov)",
+        "Models the 5-day trial as a multi-day event (duration_days of 5)",
+        "Runs scripts/generate_ics.py with the --google flag",
+        "Does not ask for the calendar application again once Google Calendar is stated",
+        "No computed deadline falls on a weekend or federal holiday"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "aaa-commercial-arbitration-order",
+      "prompt": "Procedural Order No. 1 in Orion Logistics v. Sample Freight LLC, an AAA Commercial arbitration. Hearing: February 1 through February 3, 2028. Information exchange cutoff: November 15, 2027. Expert disclosures are not set. Pre-hearing briefs due January 10, 2028. Please calendar these deadlines.",
+      "expected_output": "An .ics file with deadlines computed under AAA Commercial rules, not court rules.",
+      "files": [],
+      "expectations": [
+        "Treats the matter as arbitration with forum AAA Commercial, and does not apply CRCP or FRCP litigation rules",
+        "Does not ask for a court jurisdiction or default to one",
+        "Cites sources for the AAA rules (e.g., adr.org)",
+        "Models the three-day hearing as a multi-day event",
+        "Computed deadlines fall in a logical order relative to the hearing date",
+        "Notes that AAA scheduling is subject to the arbitrator's orders and should be verified"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "unknown-jurisdiction-must-ask",
+      "prompt": "Calendar these deadlines for Sample v. Test Co.: trial June 6, 2027, discovery cutoff April 2, 2027. I don't have the full order handy and I'm not sure what court it's in.",
+      "expected_output": "The skill asks which jurisdiction applies instead of guessing, and does not compute deadlines yet.",
+      "files": [],
+      "expectations": [
+        "Asks the user to identify the jurisdiction or proceeding type",
+        "Does not default to Colorado or Federal rules",
+        "Does not run scripts/compute_deadlines.py before the jurisdiction is known"
+      ]
+    }
+  ]
+}

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.0 — 2026-11-05
+
+### Added
+- **Evals**: `evals/evals.json` with four prompt-only cases (Colorado, federal, AAA arbitration, unknown jurisdiction). All data is invented; no case documents are stored in the skill.
+- **Distinct exit codes** for `compute_deadlines.py` and `generate_ics.py`: 0 success, 2 usage, 3 input unreadable or invalid JSON, 4 invalid input content, 5 output write failed. Documented in SKILL.md.
+
+### Changed
+- **Script output**: stdout now carries a JSON summary; the human-readable deadline list and diagnostics go to stderr. Stdout deadline list is capped at 50 items (full list remains in the output file) with a `truncated` flag.
+- **Error handling**: Missing or malformed input, invalid content (e.g., no jurisdiction), and unwritable output paths now produce a one-line error on stderr instead of a traceback.
+- **SKILL.md paths**: Example commands use relative paths (`work/...`) instead of `/tmp` and `/path/to/output`.
+- Date computation logic is unchanged.
+
 ## 0.3.1 — 2026-04-23
 
 ### Added

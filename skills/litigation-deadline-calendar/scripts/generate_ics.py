@@ -339,16 +339,39 @@ def generate_ics(data, output_path, google_mode=False):
 
     event_count = sum(1 for dl in deadlines if not dl.get("is_note"))
     mode_label = " (Google Calendar mode)" if google_mode else ""
-    print(f"Generated .ics file with {event_count} events{mode_label}: {output_path}")
-    print(f"Matter: {matter}")
+    print(f"Generated .ics file with {event_count} events{mode_label}: {output_path}", file=sys.stderr)
+    print(f"Matter: {matter}", file=sys.stderr)
     if attendees:
-        print(f"Attendees: {', '.join(attendees)}")
-    print(f"\nTo use: Import this file into Outlook, Google Calendar, or Apple Calendar.")
+        print(f"Attendees: {', '.join(attendees)}", file=sys.stderr)
+    print("To use: Import this file into Outlook, Google Calendar, or Apple Calendar.", file=sys.stderr)
+    print(json.dumps({
+        "status": "ok",
+        "output": output_path,
+        "event_count": event_count,
+        "matter": matter,
+        "google_mode": google_mode,
+        "attendees": attendees,
+    }, indent=2))
+
+
+EXIT_OK = 0
+EXIT_USAGE = 2          # bad command-line arguments (argparse default)
+EXIT_INPUT_UNREADABLE = 3   # input file missing, unreadable, or not valid JSON
+EXIT_INPUT_INVALID = 4      # input is not computed-deadlines JSON
+EXIT_OUTPUT_FAILED = 5      # could not write the .ics file
+
+
+def _fail(code, message):
+    print(f"error: {message}", file=sys.stderr)
+    sys.exit(code)
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Generate .ics calendar file from computed deadlines")
+        description="Generate .ics calendar file from computed deadlines. "
+                    "Prints a small JSON summary on stdout; diagnostics go to stderr.",
+        epilog="Exit codes: 0 ok; 2 usage; 3 input unreadable/invalid JSON; "
+               "4 invalid input content; 5 output write failed.")
     parser.add_argument("--input", required=True,
                         help="Path to computed deadlines JSON file")
     parser.add_argument("--output", required=True,
@@ -357,10 +380,24 @@ def main():
                         help="Optimize output for Google Calendar compatibility")
     args = parser.parse_args()
 
-    with open(args.input, "r") as f:
-        data = json.load(f)
+    try:
+        with open(args.input, "r") as f:
+            data = json.load(f)
+    except OSError as e:
+        _fail(EXIT_INPUT_UNREADABLE, f"cannot read input file {args.input}: {e.strerror}")
+    except json.JSONDecodeError as e:
+        _fail(EXIT_INPUT_UNREADABLE, f"input is not valid JSON ({e})")
 
-    generate_ics(data, args.output, google_mode=args.google)
+    if not isinstance(data, dict) or not isinstance(data.get("deadlines"), list):
+        _fail(EXIT_INPUT_INVALID,
+              "input must be the JSON written by compute_deadlines.py (missing 'deadlines' list)")
+
+    try:
+        generate_ics(data, args.output, google_mode=args.google)
+    except OSError as e:
+        _fail(EXIT_OUTPUT_FAILED, f"cannot write output file {args.output}: {e.strerror}")
+    except (KeyError, TypeError, ValueError) as e:
+        _fail(EXIT_INPUT_INVALID, f"malformed deadline data: {e}")
 
 
 if __name__ == "__main__":

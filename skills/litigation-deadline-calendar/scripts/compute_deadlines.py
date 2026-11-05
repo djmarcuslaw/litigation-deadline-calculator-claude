@@ -855,21 +855,51 @@ def generate_arbitration_deadlines(data):
 # Main
 # ---------------------------------------------------------------------------
 
+EXIT_OK = 0
+EXIT_USAGE = 2          # bad command-line arguments (argparse default)
+EXIT_INPUT_UNREADABLE = 3   # input file missing, unreadable, or not valid JSON
+EXIT_INPUT_INVALID = 4      # input parsed but content is invalid (e.g., no jurisdiction)
+EXIT_OUTPUT_FAILED = 5      # could not write the output file
+
+MAX_SUMMARY_ITEMS = 50      # cap on deadlines echoed on stdout; full list is in --output
+
+
+def _fail(code, message):
+    print(f"error: {message}", file=sys.stderr)
+    sys.exit(code)
+
+
 def main():
-    parser = argparse.ArgumentParser(description="Compute litigation/arbitration deadlines")
+    parser = argparse.ArgumentParser(
+        description="Compute litigation/arbitration deadlines. Writes full results "
+                    "to --output; prints a bounded JSON summary on stdout; "
+                    "diagnostics go to stderr.",
+        epilog="Exit codes: 0 ok; 2 usage; 3 input unreadable/invalid JSON; "
+               "4 invalid input content; 5 output write failed.")
     parser.add_argument("--input", required=True, help="Path to input JSON file")
     parser.add_argument("--output", required=True, help="Path to output JSON file")
     args = parser.parse_args()
 
-    with open(args.input, "r") as f:
-        data = json.load(f)
+    try:
+        with open(args.input, "r") as f:
+            data = json.load(f)
+    except OSError as e:
+        _fail(EXIT_INPUT_UNREADABLE, f"cannot read input file {args.input}: {e.strerror}")
+    except json.JSONDecodeError as e:
+        _fail(EXIT_INPUT_UNREADABLE, f"input is not valid JSON ({e})")
+
+    if not isinstance(data, dict) or not data.get("matter_name"):
+        _fail(EXIT_INPUT_INVALID, "input must be a JSON object with a 'matter_name'")
 
     proceeding_type = data.get("proceeding_type", "litigation")
 
-    if proceeding_type == "arbitration":
-        deadlines = generate_arbitration_deadlines(data)
-    else:
-        deadlines = generate_litigation_deadlines(data)
+    try:
+        if proceeding_type == "arbitration":
+            deadlines = generate_arbitration_deadlines(data)
+        else:
+            deadlines = generate_litigation_deadlines(data)
+    except (ValueError, KeyError, TypeError) as e:
+        _fail(EXIT_INPUT_INVALID, f"could not compute deadlines: {e}")
 
     result = {
         "matter_name": data["matter_name"],
@@ -883,18 +913,34 @@ def main():
         "disclaimer": ""
     }
 
-    with open(args.output, "w") as f:
-        json.dump(result, f, indent=2)
+    try:
+        with open(args.output, "w") as f:
+            json.dump(result, f, indent=2)
+    except OSError as e:
+        _fail(EXIT_OUTPUT_FAILED, f"cannot write output file {args.output}: {e.strerror}")
 
-    event_count = sum(1 for d in deadlines if not d.get("is_note"))
-    print(f"Computed {event_count} deadlines for '{data['matter_name']}'")
-    print(f"Output written to: {args.output}")
+    events = [d for d in deadlines if not d.get("is_note")]
+    summary = {
+        "status": "ok",
+        "matter_name": data["matter_name"],
+        "output": args.output,
+        "deadline_count": len(events),
+        "deadlines": [
+            {"date": d["date"], "description": d["description"], "priority": d["priority"]}
+            for d in events[:MAX_SUMMARY_ITEMS]
+        ],
+        "truncated": len(events) > MAX_SUMMARY_ITEMS,
+    }
+    # Human-readable view on stderr (diagnostics channel), bounded like the JSON.
+    print(f"Computed {len(events)} deadlines for '{data['matter_name']}'", file=sys.stderr)
+    print(f"Output written to: {args.output}", file=sys.stderr)
+    for dl in events[:MAX_SUMMARY_ITEMS]:
+        marker = "!!!" if dl["priority"] == "critical" else "! " if dl["priority"] == "high" else "  "
+        print(f"  {marker} {dl['date']}  {dl['description']}", file=sys.stderr)
+    if summary["truncated"]:
+        print(f"  ... {len(events) - MAX_SUMMARY_ITEMS} more; see {args.output}", file=sys.stderr)
 
-    for dl in deadlines:
-        if dl.get("is_note"):
-            continue
-        priority_marker = "!!!" if dl["priority"] == "critical" else "! " if dl["priority"] == "high" else "  "
-        print(f"  {priority_marker} {dl['date']}  {dl['description']}")
+    print(json.dumps(summary, indent=2))
 
 
 if __name__ == "__main__":
